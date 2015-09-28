@@ -96,7 +96,7 @@ public:
 #endif
 
 	//Applies the offset table to a set of coordinates
-	void ApplyOffsets(unsigned int * val);
+	void ApplyOffsets(volatile unsigned int * val);
 
 	// calculates the absolute galvo position based on all offsets and calibration points
 	void CalcGalvoPosition(unsigned int * val, float x, float y);
@@ -181,6 +181,18 @@ public:
 
 	int getOffset(unsigned int x, unsigned int y, unsigned int axis) {
 		return offsets[x][y][axis];
+	}
+
+	unsigned int getMin(unsigned char axis) {
+		return min[axis];
+	}
+
+	unsigned int getMax(unsigned char axis) {
+		return max[axis];
+	}
+
+	float getStepSize(unsigned char axis) {
+		return step_size[axis];
 	}
 
 	unsigned int getOffsetsSize() {

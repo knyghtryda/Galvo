@@ -1,4 +1,5 @@
 #include "galvo.h"
+#include "arduino.h"
 
 Galvo::Galvo() {
 	//Setting some sane values
@@ -74,7 +75,7 @@ void Galvo::CalcCalibrationTable() {
 }
 
 //Applies the offset table to a set of coordinates
-void Galvo::ApplyOffsets(unsigned int * val) {
+void Galvo::ApplyOffsets(volatile unsigned int * val) {
 	// shifting all coordinate values by 4 (divide by 16) in order to stop overflowing 32 bit longs
 	// This reduces bilinear interpolation resolution, but is necessary in order to not use floats.  
 	// This is not perfect and will still overflow if low values are chosen for number of grid points.
