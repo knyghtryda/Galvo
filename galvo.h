@@ -3,6 +3,7 @@
 #define GALVO_H
 //#include "PDQ_FastPin.h"
 #include <math.h>
+#include "arduino.h"
 
 class Galvo {
 private:
@@ -14,31 +15,31 @@ private:
 		CAL_GRID_SIZE = 8,
 		DAC_MAX = 0xFFFF
 	};
-	float min_step_size;
-	float max_steps_per_unit;
+	float min_step_size[2];
+	float max_steps_per_unit[2];
 	const static unsigned int steps = CAL_GRID_SIZE;
 	const static unsigned int points = CAL_GRID_SIZE + 1;
 
 	//The scale of the full grid with respect to full DAC space (0x0000 to 0xFFFF)
 	float scale[2];
 
-	// number of bits in the DAC.  Could concievably need to to be modified so it exists as a variable
-	unsigned int dacBits = DAC_MAX;
+	// Max value of the DAC.  Could concievably need to to be modified so it exists as a variable
+	unsigned int maxDAC = 0xFFFF;
 
 	//The shift value for DAC space.  This will induce a tilt on an axis and used to compensate for a non vertical center point
 	unsigned int shift[2] = { 0, 0 };
 
 	//The center of the full grid with respect to full DAC space (0x0000 to 0xFFFF)
 	unsigned int center[2] = {
-		dacBits/2 + shift[X],
-		dacBits/2 + shift[Y]
+		maxDAC/2 + shift[X],
+		maxDAC/2 + shift[Y]
 	};
 
 	//The calculated minimum DAC value
-	unsigned int min[2];
+	unsigned int minVal[2];
 
 	//The calculated maximum DAC value.  -1 is needed in order to make it an even value (hacky... may need some better math)
-	unsigned int max[2];
+	unsigned int maxVal[2];
 
 	//The calculated total size of the printable space in DAC units
 	unsigned int size[2];
@@ -54,7 +55,7 @@ private:
 	unsigned int cal_step_size[2];
 
 	//The distance between each calibration point in mm
-	float step_size[2] = { mm_size[X] / steps, mm_size[Y] / steps };
+	float step_size[2];
 
 	//The distance between the print bed and last galvo mirror expressed in steps
 	unsigned int z_size[2];
@@ -96,14 +97,14 @@ public:
 #endif
 
 	//Applies the offset table to a set of coordinates
-	void ApplyOffsets(volatile unsigned int * val);
+	void ApplyOffsets(unsigned int * val);
 
 	// calculates the absolute galvo position based on all offsets and calibration points
 	void CalcGalvoPosition(unsigned int * val, float x, float y);
 
 	// gets the grid index 
-	float get_x(int i) { return min[X] + step_size[X] * i; }
-	float get_y(int i) { return min[Y] + step_size[Y] * i; }
+	float get_x(int i) { return minVal[X] + step_size[X] * i; }
+	float get_y(int i) { return minVal[Y] + step_size[Y] * i; }
 
 	int select_x_index(float x) {
 		int i = 1;
@@ -117,19 +118,29 @@ public:
 		return i - 1;
 	}
 
+	void calcMinStepSize() {
+		min_step_size[X] = mm_size[X] / (float)maxDAC;
+		min_step_size[Y] = mm_size[Y] / (float)maxDAC;
+	}
+
+	void calcMaxStepsPerUnit() {
+		max_steps_per_unit[X] = 1.0 / min_step_size[X];
+		max_steps_per_unit[Y] = 1.0 / min_step_size[Y];
+	}
+
 	void calcMin() {
-		min[X] = (int)((float)center[X] * (1 - scale[X]));
-		min[Y] = (int)((float)center[Y] * (1 - scale[Y]));
+		minVal[X] = (int)((float)center[X] * (1.0 - scale[X]));
+		minVal[Y] = (int)((float)center[Y] * (1.0 - scale[Y]));
 	};
 
 	void calcMax() {
-		max[X] = (int)((float)center[X] * (1 + scale[X])) - 1;
-		max[Y] = (int)((float)center[Y] * (1 + scale[Y])) - 1;
+		maxVal[X] = (int)((float)center[X] * (1.0 + scale[X])) - 1;
+		maxVal[Y] = (int)((float)center[Y] * (1.0 + scale[Y])) - 1;
 	};
 
 	void calcSize() {
-		size[X] = max[X] - min[X];
-		size[Y] = max[Y] - min[Y];
+		size[X] = maxVal[X] - minVal[X];
+		size[Y] = maxVal[Y] - minVal[Y];
 	};
 
 	void setMMSize(float x, float y, float z, float e) {
@@ -153,6 +164,11 @@ public:
 		cal_step_size[X] = size[X] / steps;
 		cal_step_size[Y] = size[Y] / steps;
 	};
+
+	void calcStepSize() {
+		step_size[X] = mm_size[X] / (float)steps;
+		step_size[Y] = mm_size[Y] / (float)steps;
+	}
 
 	void calcT0Max() {
 		t0_max[X] = atan((mm_size[X] / 2) / mm_size[Z]);
@@ -184,11 +200,11 @@ public:
 	}
 
 	unsigned int getMin(unsigned char axis) {
-		return min[axis];
+		return minVal[axis];
 	}
 
 	unsigned int getMax(unsigned char axis) {
-		return max[axis];
+		return maxVal[axis];
 	}
 
 	float getStepSize(unsigned char axis) {
@@ -207,9 +223,22 @@ public:
 		return points;
 	}
 
-	unsigned int getMaxStepsPerUnit() {
-		return max_steps_per_unit;
+	unsigned int getMaxStepsPerUnit(unsigned char axis) {
+		return max_steps_per_unit[axis];
 	}
+
+	template <typename T> static void printPair(T * val) {
+		Serial.print("(");
+		Serial.print(val[X]);
+		Serial.print(", ");
+		Serial.print(val[Y]);
+		Serial.print(")");
+	}
+
+	void printValues();
+
+	void printCalTable();
+
 };
 
 #endif

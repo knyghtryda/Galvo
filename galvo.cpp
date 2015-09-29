@@ -15,39 +15,25 @@ Galvo::Galvo(float x_length, float y_length, float z_length, float e_length, flo
 }
 
 void Galvo::Initialize() {
-	min_step_size = min(mm_size[X], mm_size[Y]) / (float)dacBits;
-	max_steps_per_unit = 1.0 / min_step_size;
+	calcMinStepSize();
+	calcMaxStepsPerUnit();
 	calcMin();
 	calcMax();
 	calcT0Max();
 	calcSize();
 	calcCalStepSize();
+	calcStepSize();
 	calcTMax();
+	calcStepsPerMM();
 	calcZSize();
 	e = mm_size[E] * steps_per_mm[X];
-	position[X] = min[X];
-	position[Y] = min[Y];
+	position[X] = minVal[X];
+	position[Y] = minVal[Y];
 }
 
 void Galvo::CalcCalibrationTable() {
-	float x_pos = (float)min[X], y_pos = (float)min[Y];
+	float x_pos = (float)minVal[X], y_pos = (float)minVal[Y];
 	float x_tmp, y_tmp;
-	/*
-	SERIAL_ECHO_START;
-	SERIAL_ECHOLN("Calibration Table");
-	SERIAL_ECHOPAIR("g_center = ", (unsigned long)g_center[Y_AXIS]);
-	SERIAL_ECHOLN("");
-	SERIAL_ECHOPAIR("g_min = ", (unsigned long)g_min[Y_AXIS]);
-	SERIAL_ECHOLN("");
-	SERIAL_ECHOPAIR("g_max = ", (unsigned long)g_max[Y_AXIS]);
-	SERIAL_ECHOLN("");
-	SERIAL_ECHOPAIR("g_size = ", (unsigned long)g_size[Y_AXIS]);
-	SERIAL_ECHOLN("");
-	SERIAL_ECHOPAIR("z_size = ", (unsigned long)z_size[Y_AXIS]);
-	SERIAL_ECHOLN("");
-	SERIAL_ECHOPAIR("t_max = ", (unsigned long)t_max[Y_AXIS]);
-	SERIAL_ECHOLN("");
-	*/
 	for (int j = 0; j < points; j++) {
 		for (int i = 0; i < points; i++) {
 			x_tmp = x_pos - (float)center[X];
@@ -58,31 +44,32 @@ void Galvo::CalcCalibrationTable() {
 			y_tmp += (float)center[Y] - y_pos;
 			offsets[i][j][X] = (int)x_tmp;
 			offsets[i][j][Y] = (int)y_tmp;
-			/*
-			SERIAL_ECHO("(");
-			SERIAL_ECHO(offsets[i][j].x);
-			SERIAL_ECHO(", ");
-			SERIAL_ECHO(offsets[i][j].y);
-			SERIAL_ECHO(")");
-			*/
+			//printPair(offsets[i][j]);
 			x_pos += cal_step_size[X];
-			if (x_pos > max[X]) x_pos = min[X];
+			if (x_pos > maxVal[X]) x_pos = minVal[X];
 		}
 		y_pos += cal_step_size[Y];
-		if (y_pos > max[Y]) y_pos = min[Y];
-		//SERIAL_ECHOLN("");
+		if (y_pos > maxVal[Y]) y_pos = minVal[Y];
+		//Serial.println("");
 	}
 }
 
 //Applies the offset table to a set of coordinates
-void Galvo::ApplyOffsets(volatile unsigned int * val) {
+void Galvo::ApplyOffsets(unsigned int * val) {
 	// shifting all coordinate values by 4 (divide by 16) in order to stop overflowing 32 bit longs
 	// This reduces bilinear interpolation resolution, but is necessary in order to not use floats.  
 	// This is not perfect and will still overflow if low values are chosen for number of grid points.
 
 	unsigned int sx = cal_step_size[X] >> 4, sy = cal_step_size[Y] >> 4;
-	unsigned int x = val[X] - min[X];
-	unsigned int y = val[Y] - min[Y];
+	 /*
+  Serial.print("sx = ");
+  Serial.println(sx);
+  Serial.print("sy = ");
+  Serial.println(sy);  
+  */
+	unsigned int x = val[X] - minVal[X];
+	unsigned int y = val[Y] - minVal[Y];
+
 	unsigned int xi0 = x / cal_step_size[X],
 		yi0 = y / cal_step_size[Y];
 	unsigned int xi1, yi1;
@@ -155,8 +142,8 @@ void Galvo::CalcGalvoPosition(unsigned int * val, float x, float y) {
 	//sane values
 	x = max(min(x, mm_size[X]), mm_size[X]);
 	y = max(min(y, mm_size[Y]), mm_size[Y]);
-	unsigned int x_tmp = min[X] + size[X] * x / mm_size[X];
-	unsigned int y_tmp = min[Y] + size[Y] * y / mm_size[Y];
+	unsigned int x_tmp = minVal[X] + size[X] * x / mm_size[X];
+	unsigned int y_tmp = minVal[Y] + size[Y] * y / mm_size[Y];
 	val[X] = x_tmp;
 	val[Y] = y_tmp;
 	//unsigned long elapsed = micros();
@@ -166,7 +153,51 @@ void Galvo::CalcGalvoPosition(unsigned int * val, float x, float y) {
 	//SERIAL_ECHOLN("us");
 }
 
+void Galvo::printCalTable() {
+	for (int j = 0; j < points; j++) {
+		for (int i = 0; i < points; i++) {
+			printPair(offsets[i][j]);
+		}
+		Serial.println("");
+	}
+}
 
+void Galvo::printValues() {
+	Serial.print("min_step_size = ");
+	printPair(min_step_size);
+	Serial.print("\nmax_steps_per_unit = ");
+	printPair(max_steps_per_unit);
+	Serial.print("\nsteps = ");
+	Serial.println(steps);
+	Serial.print("points = ");
+	Serial.println(points);
+	Serial.print("scale = ");
+	printPair(scale);
+	Serial.print("\ncenter = ");
+	printPair(center);
+	Serial.print("\nmin = ");
+	printPair(minVal);
+	Serial.print("\nmax = ");
+	printPair(maxVal);
+	Serial.print("\nsize = ");
+	printPair(size);
+	Serial.print("\nmm_size = ");
+	printPair(mm_size);
+	Serial.print("\nsteps_per_mm = ");
+	printPair(steps_per_mm);
+	Serial.print("\ncal_step_size = ");
+	printPair(cal_step_size);
+	Serial.print("\nstep_size = ");
+	printPair(step_size);
+	Serial.print("\nz_size = ");
+	printPair(z_size);
+	Serial.print("\nt0_max = ");
+	printPair(t0_max);
+	Serial.print("\nt_max = ");
+	printPair(t_max);
+	Serial.print("\ne = ");
+	Serial.println(e);
+	}
 // disabled cpp file as galvo has been moved to a class
 #if 0
 // Galvo related global variables
