@@ -5,6 +5,12 @@
 #include <math.h>
 #include "arduino.h"
 
+#define TRIANGLE_MESH;
+#ifdef TRIANGLE_MESH
+#define FIXED_BITS 14
+#define FIXED_DIV 16384
+#endif
+
 class Galvo {
 private:
 	enum {
@@ -12,7 +18,13 @@ private:
 		Y = 1,
 		Z = 3,
 		E = 4,
-		CAL_GRID_SIZE = 8,
+		S0 = 0,
+		S1 = 1,
+#ifdef GRID_SIZE
+		CAL_GRID_SIZE = GRID_SIZE,
+#else
+		CAL_GRID_SIZE = 6,
+#endif
 		DAC_MAX = 0xFFFF
 	};
 	float min_step_size[2];
@@ -55,7 +67,7 @@ private:
 	unsigned int cal_step_size[2];
 
 	//The distance between each calibration point in mm
-	float step_size[2];
+	float cal_step_size_mm[2];
 
 	//The distance between the print bed and last galvo mirror expressed in steps
 	unsigned int z_size[2];
@@ -77,7 +89,8 @@ public:
 	int offsets[points][points][2] = {};
 
 #ifdef TRIANGLE_MESH
-	int slopes[steps][steps][3] = {};
+	//array to hold table of slopes for mesh/slope calculations
+	int slopes[steps][steps][2][2][2] = {};
 #endif
 
 	Galvo();
@@ -99,23 +112,56 @@ public:
 	//Applies the offset table to a set of coordinates
 	void ApplyOffsets(unsigned int * val);
 
+	//Applies the offset table to a set of coordinates using the slope table
+	void ApplySlopeOffsets(unsigned int * val);
+
 	// calculates the absolute galvo position based on all offsets and calibration points
 	void CalcGalvoPosition(unsigned int * val, float x, float y);
 
 	// gets the grid index 
-	float get_x(int i) { return minVal[X] + step_size[X] * i; }
-	float get_y(int i) { return minVal[Y] + step_size[Y] * i; }
+	float get_x_mm(int i) { return cal_step_size_mm[X] * i; }
+	float get_y_mm(int i) { return cal_step_size_mm[Y] * i; }
 
 	int select_x_index(float x) {
 		int i = 1;
-		while (x > get_x(i) && i < steps) i++;
+		while (x > get_x_mm(i) && i < steps) i++;
 		return i - 1;
 	}
 
 	int select_y_index(float y) {
 		int i = 1;
-		while (y > get_y(i) && i < steps) i++;
+		while (y > get_y_mm(i) && i < steps) i++;
 		return i - 1;
+	}
+
+	inline int select_index(unsigned int val, unsigned char axis) {
+		int i = 1;
+		unsigned int val0 = 0;
+		while (val > val0 && i < steps) {
+			i++;
+			val0 += cal_step_size[axis];
+		}
+		return i - 1;
+	}
+
+	inline int select_low_index_value(unsigned int val, unsigned char axis) {
+		int i = 1;
+		unsigned int val0 = cal_step_size[axis];
+		while (val > val0 && i < steps) {
+			i++;
+			val0 += cal_step_size[axis];
+		}
+		return val0 - cal_step_size[axis];
+	}
+
+	inline int select_high_index_value(unsigned int val, unsigned char axis) {
+		int i = 1;
+		unsigned int val0 = cal_step_size[axis];
+		while (val > val0 && i < steps) {
+			i++;
+			val0 += cal_step_size[axis];
+		}
+		return val0;
 	}
 
 	void calcMinStepSize() {
@@ -166,8 +212,8 @@ public:
 	};
 
 	void calcStepSize() {
-		step_size[X] = mm_size[X] / (float)steps;
-		step_size[Y] = mm_size[Y] / (float)steps;
+		cal_step_size_mm[X] = mm_size[X] / (float)steps;
+		cal_step_size_mm[Y] = mm_size[Y] / (float)steps;
 	}
 
 	void calcT0Max() {
@@ -208,7 +254,7 @@ public:
 	}
 
 	float getStepSize(unsigned char axis) {
-		return step_size[axis];
+		return cal_step_size_mm[axis];
 	}
 
 	unsigned int getOffsetsSize() {
@@ -238,6 +284,8 @@ public:
 	void printValues();
 
 	void printCalTable();
+
+	void printSlopeTable();
 
 };
 

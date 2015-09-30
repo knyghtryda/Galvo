@@ -1,5 +1,6 @@
 #include "galvo.h"
 #include "arduino.h"
+#include "mult16x8.h"
 
 Galvo::Galvo() {
 	//Setting some sane values
@@ -53,6 +54,112 @@ void Galvo::CalcCalibrationTable() {
 		//Serial.println("");
 	}
 }
+
+#ifdef TRIANGLE_MESH
+/*
+*		 |
+*	  Q2 | Q3
+*	-----------
+*	  Q0 | Q1
+*		 |
+*
+*	Q0 example 
+*	01-------11
+*	| S0	/ |
+*	|	 /	  |
+*	| /   S1  |
+*	00-------10
+*	S0 = dx > dy
+*	S1 = dx < dy 
+*	This applies for all quadrants, which means S0 is below S1 for Q2 and Q3
+*/
+void Galvo::CalcSlopeTable() {
+	int s1[2][2], s2[2][2];
+	int offset00[2], offset01[2], offset10[2], offset11[2];
+	unsigned char quadrant;
+	for (int j = 0; j < steps; j++) {
+		for (int i = 0; i < steps; i++) {
+			offset00[X] = offsets[i][j][X];
+			offset01[X] = offsets[i][j + 1][X];
+			offset10[X] = offsets[i + 1][j][X];
+			offset11[X] = offsets[i + 1][j + 1][X];
+			offset00[Y] = offsets[i][j][Y];
+			offset01[Y] = offsets[i][j + 1][Y];
+			offset10[Y] = offsets[i + 1][j][Y];
+			offset11[Y] = offsets[i + 1][j + 1][Y];
+			if (i < steps >> 1) {
+				if (j < steps >> 1) {
+					slopes[i][j][S0][X][X] = (int)(((float)(offset11[X] - offset01[X]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S0][X][Y] = (int)(((float)(offset01[X] - offset00[X]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+					slopes[i][j][S0][Y][X] = (int)(((float)(offset11[Y] - offset01[Y]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S0][Y][Y] = (int)(((float)(offset01[Y] - offset00[Y]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+					slopes[i][j][S1][X][X] = (int)(((float)(offset10[X] - offset00[X]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S1][X][Y] = (int)(((float)(offset11[X] - offset10[X]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+					slopes[i][j][S1][Y][X] = (int)(((float)(offset10[Y] - offset00[Y]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S1][Y][Y] = (int)(((float)(offset11[Y] - offset10[Y]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+				}
+				else {
+					slopes[i][j][S0][X][X] = (int)(((float)(offset10[X] - offset00[X]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S0][X][Y] = (int)(((float)(offset01[X] - offset00[X]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+					slopes[i][j][S0][Y][X] = (int)(((float)(offset10[Y] - offset00[Y]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S0][Y][Y] = (int)(((float)(offset01[Y] - offset00[Y]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+					slopes[i][j][S1][X][X] = (int)(((float)(offset11[X] - offset01[X]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S1][X][Y] = (int)(((float)(offset11[X] - offset10[X]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+					slopes[i][j][S1][Y][X] = (int)(((float)(offset11[Y] - offset01[Y]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S1][Y][Y] = (int)(((float)(offset11[Y] - offset10[Y]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+				}
+			}
+			else {
+				if (j < steps >> 1) {
+					slopes[i][j][S0][X][X] = (int)(((float)(offset11[X] - offset01[X]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S0][X][Y] = (int)(((float)(offset11[X] - offset10[X]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+					slopes[i][j][S0][Y][X] = (int)(((float)(offset11[Y] - offset01[Y]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S0][Y][Y] = (int)(((float)(offset11[Y] - offset10[Y]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+					slopes[i][j][S1][X][X] = (int)(((float)(offset10[X] - offset00[X]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S1][X][Y] = (int)(((float)(offset01[X] - offset00[X]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+					slopes[i][j][S1][Y][X] = (int)(((float)(offset10[Y] - offset00[Y]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S1][Y][Y] = (int)(((float)(offset01[Y] - offset00[Y]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+				}
+				else {
+					slopes[i][j][S0][X][X] = (int)(((float)(offset10[X] - offset00[X]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S0][X][Y] = (int)(((float)(offset11[X] - offset01[X]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+					slopes[i][j][S0][Y][X] = (int)(((float)(offset10[Y] - offset00[Y]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S0][Y][Y] = (int)(((float)(offset11[Y] - offset01[Y]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+					slopes[i][j][S1][X][X] = (int)(((float)(offset11[X] - offset01[X]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S1][X][Y] = (int)(((float)(offset01[X] - offset00[X]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+					slopes[i][j][S1][Y][X] = (int)(((float)(offset11[Y] - offset01[Y]) / (float)cal_step_size[X]) * (float)FIXED_DIV);
+					slopes[i][j][S1][Y][Y] = (int)(((float)(offset01[Y] - offset00[Y]) / (float)cal_step_size[Y]) * (float)FIXED_DIV);
+				}
+			}
+			printPair(offset01);
+			printPair(offset11);
+			Serial.println("");
+			printPair(offset00);
+			printPair(offset10);
+			Serial.println("");
+			Serial.print("Fixed point S0 vectors = X: ");
+			printPair(slopes[i][j][S0][X]);
+			Serial.print(", Y: ");
+			printPair(slopes[i][j][S0][Y]);
+			Serial.println("");
+			Serial.print("Fixed point S1 vectors = X: ");
+			printPair(slopes[i][j][S1][X]);
+			Serial.print(", Y: ");
+			printPair(slopes[i][j][S1][Y]);
+			Serial.println("");
+		}
+	}
+}
+
+void Galvo::printSlopeTable() {
+	for (int j = 0; j < steps; j++) {
+		for (int i = 0; i < steps; i++) {
+			//printPair(slopes[i][j]);
+		}
+		//Serial.println("");
+	}
+}
+#endif
 
 //Applies the offset table to a set of coordinates
 void Galvo::ApplyOffsets(unsigned int * val) {
@@ -137,6 +244,72 @@ void Galvo::ApplyOffsets(unsigned int * val) {
 	val[Y] += afy;
 }
 
+void Galvo::ApplySlopeOffsets(unsigned int * val) {
+	unsigned int x = val[X] - minVal[X];
+	unsigned int y = val[Y] - minVal[Y];
+	unsigned char index[2], index0[2];
+	unsigned int origin[2];
+	int diff[2];
+	unsigned char t = 0;
+	index[X] = select_index(x, X);
+	index[Y] = select_index(y, Y);
+	if (index[X] < steps >> 1) {
+		if (index[Y] < steps >> 1) {
+			origin[X] = (index[X] + 1) * cal_step_size[X];//select_high_index_value(x, X);
+			origin[Y] = (index[Y] + 1) + cal_step_size[Y];//select_high_index_value(y, Y);
+			index0[X] = index[X] + 1;
+			index0[Y] = index[Y] + 1;
+		}
+		else {
+			origin[X] = index[X] * cal_step_size[X];
+			origin[Y] = (index[X] + 1) * cal_step_size[X];
+			index0[X] = index[X] + 1;
+			index0[Y] = index[Y];
+		}
+	}
+	else {
+		if (index[Y] < steps >> 1) {
+			origin[X] = (index[X] + 1) * cal_step_size[X];
+			origin[Y] = index[X] * cal_step_size[X];
+			index0[X] = index[X];
+			index0[Y] = index[Y] + 1;
+		}
+		else {
+			MultiSU16X8toL16(origin[X], cal_step_size[X], index[X]);//origin[X] = index[X] * cal_step_size[X];
+			MultiSU16X8toL16(origin[Y], cal_step_size[Y], index[Y]);//origin[Y] = index[Y] * cal_step_size[Y];
+			index0[X] = index[X];
+			index0[Y] = index[Y];
+		}
+	}
+	/*
+	Serial.print("\nindex = ");
+	printPair(index);
+	Serial.print("\norigin = ");
+	printPair(origin);
+	Serial.print("\ndiff = ");
+	printPair(diff);
+	Serial.print("\nSlope X = ");
+	printPair(slopes[index[X]][index[Y]][t][X]);
+	Serial.print(" ");
+	Serial.print((float)slopes[index[X]][index[Y]][t][X][X] / (float)FIXED_DIV);
+	Serial.print(", ");
+	Serial.print((float)slopes[index[X]][index[Y]][t][X][Y] / (float)FIXED_DIV);
+	Serial.print("\nSlope Y = ");
+	printPair(slopes[index[X]][index[Y]][t][Y]);
+	Serial.println("");
+	*/
+	diff[X] = x - origin[X];
+	diff[Y] = y - origin[Y];
+	if (abs(diff[X]) > abs(diff[Y])) {
+		t = 0;
+	}
+	else {
+		t = 1;
+	}
+	val[X] += (int)(((long)diff[X] * (long)slopes[index[X]][index[Y]][t][X][X] + (long)diff[Y] * (long)slopes[index[X]][index[Y]][t][X][Y]) >> FIXED_BITS) + offsets[index0[X]][index0[Y]][X];
+	val[Y] += (int)(((long)diff[X] * (long)slopes[index[X]][index[Y]][t][Y][X] + (long)diff[Y] * (long)slopes[index[X]][index[Y]][t][Y][Y]) >> FIXED_BITS) + offsets[index0[X]][index0[Y]][Y];
+}
+
 //Calculates an absolute galvo position based on a float input
 void Galvo::CalcGalvoPosition(unsigned int * val, float x, float y) {
 	//sane values
@@ -154,13 +327,15 @@ void Galvo::CalcGalvoPosition(unsigned int * val, float x, float y) {
 }
 
 void Galvo::printCalTable() {
-	for (int j = 0; j < points; j++) {
+	for (int j = points - 1; j >= 0; j--) {
 		for (int i = 0; i < points; i++) {
 			printPair(offsets[i][j]);
 		}
 		Serial.println("");
 	}
 }
+
+
 
 void Galvo::printValues() {
 	Serial.print("min_step_size = ");
@@ -187,8 +362,8 @@ void Galvo::printValues() {
 	printPair(steps_per_mm);
 	Serial.print("\ncal_step_size = ");
 	printPair(cal_step_size);
-	Serial.print("\nstep_size = ");
-	printPair(step_size);
+	Serial.print("\ncal_step_size_mm = ");
+	printPair(cal_step_size_mm);
 	Serial.print("\nz_size = ");
 	printPair(z_size);
 	Serial.print("\nt0_max = ");
