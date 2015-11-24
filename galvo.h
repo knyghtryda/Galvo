@@ -5,14 +5,15 @@
 #include <math.h>
 #include "arduino.h"
 
-#define TRIANGLE_MESH;
+#define TRIANGLE_MESH
 #ifdef TRIANGLE_MESH
 #define FIXED_BITS 14
 #define FIXED_DIV 16384
 #endif
 
+#define CAL_GRID_SIZE 2
 class Galvo {
-private:
+public:
 	enum {
 		X = 0,
 		Y = 1,
@@ -20,13 +21,9 @@ private:
 		E = 4,
 		S0 = 0,
 		S1 = 1,
-#ifdef GRID_SIZE
-		CAL_GRID_SIZE = GRID_SIZE,
-#else
-		CAL_GRID_SIZE = 6,
-#endif
 		DAC_MAX = 0xFFFF
 	};
+private:
 	float min_step_size[2];
 	float max_steps_per_unit[2];
 	const static unsigned int steps = CAL_GRID_SIZE;
@@ -104,9 +101,14 @@ public:
 	//Computes the calibration offset table
 	void CalcCalibrationTable();
 
+	//Zeroes the calibration offset table
+	void ResetCalibrationTable();
+
 #ifdef TRIANGLE_MESH
 	//Calculates the slope table in order to use triangle mesh
 	void CalcSlopeTable();
+	//Zeroes the slope table
+	void ResetSlopeTable();
 #endif
 
 	//Applies the offset table to a set of coordinates
@@ -272,7 +274,7 @@ public:
 	unsigned int getMaxStepsPerUnit(unsigned char axis) {
 		return max_steps_per_unit[axis];
 	}
-
+#ifdef GALVO_DEBUG
 	template <typename T> static void printPair(T * val) {
 		Serial.print("(");
 		Serial.print(val[X]);
@@ -280,13 +282,13 @@ public:
 		Serial.print(val[Y]);
 		Serial.print(")");
 	}
-
+	
 	void printValues();
 
 	void printCalTable();
 
 	void printSlopeTable();
-
+#endif
 };
 
 #endif
